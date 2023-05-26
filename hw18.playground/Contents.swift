@@ -55,17 +55,57 @@ class SpawningThread: Thread {
 // MARK: - WorkingThread
 
 class WorkingThread: Thread {
+    private let storage: Storage
+    private var countSolderedChips = 0
 
+    init(storage: Storage) {
+        self.storage = storage
+    }
+
+    override func main() {
+        while storage.isEmpty || storage.isAvailable {
+            let chip = storage.give()
+            chip.sodering()
+            countSolderedChips += 1
+            print("припаян")
+        }
+        if countSolderedChips == 10 {
+            return
+        }
+    }
 }
 
 // MARK: - Storage
 
 class Storage {
-    private var chipStorage = [Chip]()
+    private var chipStorage: [Chip] = []
+    private var condition = NSCondition()
+    var isEmpty: Bool {
+        chipStorage.isEmpty
+    }
+    var isAvailable = false
 
     func putInStorage(chip: Chip) {
+        condition.lock()
         chipStorage.append(chip)
+        isAvailable = true
         print("чип добавлен в хранилище")
+        condition.signal()
+        condition.unlock()
+    }
+
+    func give() -> Chip {
+        condition.lock()
+        while !isAvailable {
+            condition.wait()
+        }
+        let chip = chipStorage.removeLast()
+
+        if isEmpty {
+            isAvailable = false
+        }
+        condition.unlock()
+        return chip
     }
 }
 
@@ -73,5 +113,7 @@ class Storage {
 
 let storage = Storage()
 let spawningThread = SpawningThread(storage: storage)
+let workingThread = WorkingThread(storage: storage)
 
 spawningThread.start()
+workingThread.start()
